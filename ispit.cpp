@@ -1,8 +1,11 @@
 #include <iostream>
-#include <string>
 #include <vector>
-#include <exception>
-#include <stdexcept>
+#include <cassert>
+#include <functional>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <sstream>
 using namespace std;
 
 /****************************************************************************
@@ -21,11 +24,13 @@ const int min_karaktera_po_poglavlju = 30;
 
 char *AlocirajNizKaraktera(const char *sadrzaj)
 {
+    if (sadrzaj == nullptr)
+    {
+        return nullptr;
+    }
     int vel = strlen(sadrzaj) + 1;
     char *temp = new char[vel];
     strncpy(temp, sadrzaj, vel);
-    if (sadrzaj == nullptr)
-        temp = nullptr;
     return temp;
 }
 
@@ -89,9 +94,9 @@ public:
     }
     T1 *getElementi1Pok() { return _elementi1; }
     T2 *getElementi2Pok() { return _elementi2; }
-    T1 &getElement1(int lokacija) { return _elementi1[lokacija]; }
-    T2 &getElement2(int lokacija) { return _elementi2[lokacija]; }
-    int getTrenutno() { return _trenutno; }
+    T1 &getElement1(int lokacija) const { return _elementi1[lokacija]; }
+    T2 &getElement2(int lokacija) const { return _elementi2[lokacija]; }
+    int getTrenutno() const { return _trenutno; }
 
     void DodajElemente(T1 elementi1, T2 elementi2)
     {
@@ -116,7 +121,7 @@ public:
         _trenutno++;
     }
 
-    friend ostream &operator<<(ostream &COUT, Kolekcija<T1, T2> &obj)
+    friend ostream &operator<<(ostream &COUT, const Kolekcija<T1, T2> &obj)
     {
         for (size_t i = 0; i < obj._trenutno; i++)
             COUT << obj.getElement1(i) << " " << obj.getElement2(i) << endl;
@@ -216,6 +221,19 @@ public:
     void SetOcjena(int ocjena)
     {
         _ocjena = ocjena;
+    }
+
+    friend ostream &operator<<(ostream &COUT, const Poglavlje &obj)
+    {
+        if (obj._naslov == nullptr || obj._sadrzaj == nullptr)
+            return COUT;
+        COUT << endl
+             << obj._naslov << endl
+             << obj._sadrzaj << endl;
+        if (obj._prihvaceno)
+            COUT << "Ocjena: " << obj._ocjena << endl;
+        ;
+        return COUT;
     }
 };
 
@@ -419,19 +437,180 @@ protected:
     string _imePrezime;
 
 public:
+    Osoba()
+    {
+        _imePrezime = not_set;
+    }
     Osoba(string imePrezime) : _imePrezime(imePrezime) {}
-    string GetImePrezime() { return _imePrezime; }
+    Osoba(const Osoba &obj)
+    {
+        _imePrezime = obj.GetImePrezime();
+    }
+    Osoba(Osoba &&obj) noexcept : _imePrezime(move(obj._imePrezime)) {}
+    Osoba &operator=(const Osoba &obj)
+    {
+        if (this != &obj)
+        {
+            _imePrezime = obj.GetImePrezime();
+        }
+
+        return *this;
+    }
+    virtual ~Osoba() {}
+    string GetImePrezime() const { return _imePrezime; }
     virtual void Info() = 0;
 };
 
-class Nastavnik
+bool operator==(const Osoba &obj1, const Osoba &obj2)
+{
+    return obj1.GetImePrezime() == obj2.GetImePrezime();
+}
+
+bool operator!=(const Osoba &obj1, const Osoba &obj2)
+{
+    return !(obj1 == obj2);
+}
+
+mutex mutko;
+
+class Nastavnik : public Osoba
 {
     // Parametar string predstavlja broj indeksa studenta koji prijavljuje zavrsni rad kod odredjenog nastavnika
     Kolekcija<string, ZavrsniRad> _teme;
 
 public:
+    virtual void Info() override
+    {
+        cout << this->GetImePrezime();
+        for (int i = 0; i < _teme.getTrenutno(); i++)
+        {
+            cout << "IB: " << _teme.getElement1(i) << " " << _teme.getElement2(i) << endl;
+        }
+        cout << endl;
+    }
+    Nastavnik() : Osoba() {}
+    Nastavnik(const char *imePrezime) : Osoba(imePrezime) {}
+    Nastavnik(const Nastavnik &obj) : Osoba(obj), _teme(obj._teme) {}
+    Nastavnik(Nastavnik &&obj) noexcept : Osoba(move(obj)), _teme(move(obj._teme)) {}
+    Nastavnik &operator=(const Nastavnik &obj)
+    {
+        if (this != &obj)
+        {
+            static_cast<Osoba &>(*this) = obj;
+            _teme = obj._teme;
+        }
+
+        return *this;
+    }
+    virtual ~Nastavnik() override {}
     Kolekcija<string, ZavrsniRad> &GetTeme() { return _teme; };
+
+    bool DodajZavrsniRad(string indeks, ZavrsniRad rad)
+    {
+        bool temp = false;
+        if (_teme.getTrenutno() == 0)
+        {
+            _teme.DodajElemente(indeks, rad);
+            temp = true;
+        }
+
+        auto provjeriIsteRadove = [this, &rad, &indeks]()
+        {
+            bool flag = true;
+            for (int i = 0; i < _teme.getTrenutno(); i++)
+            {
+                if (strcmp(_teme.getElement2(i).GetNazivTeme(), rad.GetNazivTeme()))
+                {
+                    flag = false;
+                }
+                if (_teme.getElement1(i) == indeks)
+                {
+                    flag = false;
+                }
+            }
+            return flag;
+        };
+
+        if (provjeriIsteRadove())
+        {
+            _teme.DodajElemente(indeks, rad);
+            temp = true;
+        }
+
+        return temp;
+    }
+
+    ZavrsniRad *ZakaziOdbranuRada(string indeks, string datumOdbrane)
+    {
+        float prosjek = 0.0f;
+        ZavrsniRad *novi = nullptr;
+
+        for (int i = 0; i < _teme.getTrenutno(); i++)
+        {
+            if (_teme.getElement1(i) == indeks)
+            {
+                if (_teme.getElement2(i).GetPoglavlja().size() > min_polgavlja)
+                {
+                    for (int j = 0; j < _teme.getElement2(i).GetPoglavlja().size(); j++)
+                    {
+                        if (strlen(_teme.getElement2(i).GetPoglavlja()[j].GetSadrzaj()) > min_karaktera_po_poglavlju)
+                        {
+                            if (_teme.getElement2(i).GetPoglavlja()[j].GetPrihvaceno() == true)
+                            {
+                                prosjek += _teme.getElement2(i).GetPoglavlja()[j].GetOcjena();
+                                _teme.getElement2(i).SetDatumOdbrane(datumOdbrane);
+                                novi = &_teme.getElement2(i);
+                            }
+                        }
+                    }
+                    prosjek /= _teme.getElement2(i).GetPoglavlja().size();
+                    _teme.getElement2(i).SetKonacnaOcjena(prosjek);
+                }
+            }
+        }
+        return novi;
+    }
+
+    string posaljiMail(string indeks, float ocjena)
+    {
+        lock_guard<mutex> lock(mutko); // automatski mutex management lock/unlock
+        string mail;
+        mail = "Postovani " + indeks + " , uzimajuci u obzir cinjenicu da ste kod mentora" + this->GetImePrezime() + " uspjesno odbranili rad sa ocjenom " + to_string(ocjena) + "  cast nam je pozvati vas na dodjelu nagrada za najbolje studente koja ce se odrzati  na	FIT - u 03.07.2019.godine.";
+        return mail;
+    }
+
+    friend ostream &operator<<(ostream &COUT, const Nastavnik &obj)
+    {
+        COUT << obj.GetImePrezime() << endl;
+        COUT << "Teme: " << endl;
+        COUT << obj._teme << endl;
+        return COUT;
+    }
 };
+
+string PosaljiPozivZaDodjeluNagrada(Nastavnik **nastavnici, int max, float granica)
+{
+    string poruka = not_set;
+
+    for (int i = 0; i < max; i++)
+    {
+        for (int j = 0; j < nastavnici[i]->GetTeme().getTrenutno(); j++)
+        {
+            if (nastavnici[i]->GetTeme().getElement2(j).GetOcjena() > granica)
+            {
+                stringstream upis;
+                auto poziv = [&i, &j, &nastavnici, &upis]()
+                {
+                    upis << nastavnici[i]->posaljiMail(nastavnici[i]->GetTeme().getElement1(j), nastavnici[i]->GetTeme().getElement2(j).GetOcjena());
+                    return upis.str();
+                };
+                thread t(poziv);
+                poruka = poziv();
+            }
+        }
+    }
+    return poruka;
+}
 
 int main()
 {
