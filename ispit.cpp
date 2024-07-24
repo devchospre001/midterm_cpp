@@ -48,7 +48,7 @@ public:
             _elementi2[i] = obj._elementi2[i];
         }
     }
-    Kolekcija() noexcept
+    Kolekcija(Kolekcija &&obj) noexcept
     {
         _trenutno = obj._trenutno;
         _elementi1 = obj._elementi1;
@@ -121,6 +121,7 @@ public:
         return COUT;
     }
 };
+
 class Poglavlje
 {
     char *_naslov;
@@ -133,8 +134,44 @@ public:
     {
         _naslov = AlocirajNizKaraktera(naslov);
         _sadrzaj = AlocirajNizKaraktera(sadrzaj);
+        _prihvaceno = false;
+        _ocjena = 0;
     }
-    Poglavlje()
+    Poglavlje(const Poglavlje &obj)
+    {
+        _naslov = AlocirajNizKaraktera(obj.GetNaslov());
+        _sadrzaj = AlocirajNizKaraktera(obj.GetSadrzaj());
+        _prihvaceno = obj._prihvaceno;
+        _ocjena = obj._ocjena;
+    }
+    Poglavlje(Poglavlje &&obj) noexcept
+    {
+        _naslov = obj._naslov;
+        _sadrzaj = obj._sadrzaj;
+        _prihvaceno = obj._prihvaceno;
+        _ocjena = obj._ocjena;
+
+        obj._naslov = nullptr;
+        obj._sadrzaj = nullptr;
+        obj._prihvaceno = false;
+        obj._ocjena = 0;
+    }
+    Poglavlje &operator=(const Poglavlje &obj)
+    {
+        if (this != &obj)
+        {
+            delete[] _naslov;
+            delete[] _sadrzaj;
+
+            _naslov = AlocirajNizKaraktera(obj.GetNaslov());
+            _sadrzaj = AlocirajNizKaraktera(obj.GetSadrzaj());
+            _prihvaceno = obj.GetPrihvaceno();
+            _ocjena = obj.GetOcjena();
+        }
+
+        return *this;
+    }
+    ~Poglavlje()
     {
         delete[] _naslov;
         _naslov = nullptr;
@@ -153,11 +190,61 @@ public:
         ;
         return COUT;
     }
-    char *GetNaslov() { return _naslov; }
-    char *GetSadrzaj() { return _sadrzaj; }
-    bool GetPrihvaceno() { return _prihvaceno; }
-    int GetOcjena() { return _ocjena; }
+
+    // getters
+    char *GetNaslov() const { return _naslov; }
+    char *GetSadrzaj() const { return _sadrzaj; }
+    bool GetPrihvaceno() const { return _prihvaceno; }
+    int GetOcjena() const { return _ocjena; }
+
+    // setters
+    void SetNaslov(const char *naslov)
+    {
+        _naslov = AlocirajNizKaraktera(naslov);
+    }
+    void SetSadrzaj(const char *sadrzaj)
+    {
+        _sadrzaj = AlocirajNizKaraktera(string(string(_sadrzaj) + string("  ") + string(sadrzaj)).c_str());
+        // razlika (SetNaslov radi direktno dok SetSadrzaj radi kao append metoda)
+    }
+    bool SetPrihvaceno(bool prihvaceno)
+    {
+        _prihvaceno = prihvaceno;
+    }
+    int SetOcjena(int ocjena)
+    {
+        _ocjena = ocjena;
+    }
 };
+
+bool operator==(const Poglavlje &obj1, const Poglavlje &obj2)
+{
+    bool tmp = true;
+
+    if (strcmp(obj1.GetNaslov(), obj2.GetNaslov()) != 0)
+    {
+        tmp = false;
+    }
+    if (strcmp(obj1.GetSadrzaj(), obj2.GetSadrzaj()) != 0)
+    {
+        tmp = false;
+    }
+    if (obj1.GetPrihvaceno() != obj2.GetPrihvaceno())
+    {
+        tmp = false;
+    }
+    if (obj1.GetOcjena() != obj2.GetOcjena())
+    {
+        tmp = false;
+    }
+
+    return tmp;
+}
+
+bool operator!=(const Poglavlje &obj1, const Poglavlje &obj2)
+{
+    return !(obj1 == obj2);
+}
 
 class ZavrsniRad
 {
