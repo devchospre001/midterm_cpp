@@ -19,11 +19,11 @@ const int min_karaktera_po_poglavlju = 30;
 
 char *AlocirajNizKaraktera(const char *sadrzaj)
 {
-    if (sadrzaj == nullptr)
-        return nullptr;
     int vel = strlen(sadrzaj) + 1;
     char *temp = new char[vel];
     strncpy(temp, sadrzaj, vel);
+    if (sadrzaj == nullptr)
+        temp = nullptr;
     return temp;
 }
 
@@ -36,6 +36,48 @@ class Kolekcija
 
 public:
     Kolekcija() : _trenutno(0), _elementi1(nullptr), _elementi2(nullptr) {}
+    Kolekcija(const Kolekcija &obj)
+    {
+        _trenutno = obj.getTrenutno();
+        _elementi1 = new T1[_trenutno];
+        _elementi2 = new T2[_trenutno];
+
+        for (int i = 0; i < _trenutno; i++)
+        {
+            _elementi1[i] = obj._elementi1[i];
+            _elementi2[i] = obj._elementi2[i];
+        }
+    }
+    Kolekcija() noexcept
+    {
+        _trenutno = obj._trenutno;
+        _elementi1 = obj._elementi1;
+        _elementi2 = obj._elementi2;
+
+        obj._trenutno = 0;
+        obj._elementi1 = nullptr;
+        obj._elementi2 = nullptr;
+    }
+    Kolekcija &operator=(const Kolekcija &obj)
+    {
+        if (this != &obj)
+        {
+            delete[] _elementi1;
+            delete[] _elementi2;
+
+            _trenutno = obj.getTrenutno();
+            _elementi1 = new T1[_trenutno];
+            _elementi2 = new T2[_trenutno];
+
+            for (int i = 0; i < _trenutno; i++)
+            {
+                _elementi1[i] = obj._elementi1[i];
+                _elementi2[i] = obj._elementi2[i];
+            }
+        }
+
+        return *this;
+    }
     ~Kolekcija()
     {
         delete[] _elementi1;
@@ -48,6 +90,29 @@ public:
     T1 &getElement1(int lokacija) { return _elementi1[lokacija]; }
     T2 &getElement2(int lokacija) { return _elementi2[lokacija]; }
     int getTrenutno() { return _trenutno; }
+
+    void DodajElemente(T1 elementi1, T2 elementi2)
+    {
+        T1 *temp1 = _elementi1;
+        T2 *temp2 = _elementi2;
+        _elementi1 = new T1[_trenutno + 1];
+        _elementi2 = new T2[_trenutno + 1];
+
+        for (int i = 0; i < _trenutno; i++)
+        {
+            _elementi1[i] = temp1[i];
+            _elementi2[i] = temp2[i];
+        }
+
+        delete[] temp1;
+        delete[] temp2;
+        temp1 = nullptr;
+        temp2 = nullptr;
+
+        _elementi1[_trenutno] = elementi1;
+        _elementi2[_trenutno] = elementi2;
+        _trenutno++;
+    }
 
     friend ostream &operator<<(ostream &COUT, Kolekcija<T1, T2> &obj)
     {
