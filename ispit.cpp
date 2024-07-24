@@ -1,6 +1,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <exception>
+#include <stdexcept>
 using namespace std;
 
 /****************************************************************************
@@ -207,11 +209,11 @@ public:
         _sadrzaj = AlocirajNizKaraktera(string(string(_sadrzaj) + string("  ") + string(sadrzaj)).c_str());
         // razlika (SetNaslov radi direktno dok SetSadrzaj radi kao append metoda)
     }
-    bool SetPrihvaceno(bool prihvaceno)
+    void SetPrihvaceno(bool prihvaceno)
     {
         _prihvaceno = prihvaceno;
     }
-    int SetOcjena(int ocjena)
+    void SetOcjena(int ocjena)
     {
         _ocjena = ocjena;
     }
@@ -253,26 +255,114 @@ class ZavrsniRad
     string _datumOdbrane;
     float _konacnaOcjena; // prosjek ocjena svih poglavlja u zavrsnom radu koja se izracunava u momentu zakazivanja odbrane
 public:
-    ZavrsniRad(const char *nazivTeme = nullptr) : _konacnaOcjena(0), _datumOdbrane(not_set)
+    ZavrsniRad(const char *nazivTeme = nullptr) : _konacnaOcjena(0.0f), _datumOdbrane(not_set)
     {
         _tema = AlocirajNizKaraktera(nazivTeme);
     }
 
-    ZavrsniRad(const ZavrsniRad &org) : _poglavljaRada(org._poglavljaRada), _konacnaOcjena(org._konacnaOcjena), _datumOdbrane(org._datumOdbrane)
+    ZavrsniRad(const ZavrsniRad &org) : _poglavljaRada(org._poglavljaRada), _datumOdbrane(org._datumOdbrane)
     {
-        _tema = AlocirajNizKaraktera(org._tema);
+        _tema = AlocirajNizKaraktera(org.GetNazivTeme());
+        _konacnaOcjena = org.GetOcjena();
     }
+    ZavrsniRad(ZavrsniRad &&obj) noexcept : _poglavljaRada(move(obj._poglavljaRada)), _datumOdbrane(move(obj._datumOdbrane))
+    {
+        _tema = obj._tema;
+        _konacnaOcjena = obj._konacnaOcjena;
 
+        obj._tema = nullptr;
+        obj._konacnaOcjena = 0.0f;
+    }
+    ZavrsniRad &operator=(const ZavrsniRad &obj)
+    {
+        if (this != &obj)
+        {
+            delete[] _tema;
+            _poglavljaRada.clear();
+
+            _tema = AlocirajNizKaraktera(obj.GetNazivTeme());
+            _poglavljaRada = obj._poglavljaRada;
+            _datumOdbrane = obj.GetDatumOdbrane();
+            _konacnaOcjena = obj.GetOcjena();
+        }
+
+        return *this;
+    }
     ~ZavrsniRad()
     {
         delete[] _tema;
         _tema = nullptr;
     }
+
+    // getters
     char *GetNazivTeme() const { return _tema; }
     vector<Poglavlje> &GetPoglavlja() { return _poglavljaRada; };
     string GetDatumOdbrane() const { return _datumOdbrane; }
-    float GetOcjena() { return _konacnaOcjena; }
-    void SetDatumOdbrane(string datumOdbrane) { _datumOdbrane = datumOdbrane; }
+    float GetOcjena() const { return _konacnaOcjena; }
+
+    // setters
+    void SetDatumOdbrane(string datumOdbrane)
+    {
+        _datumOdbrane = datumOdbrane;
+    }
+    void SetKonacnaOcjena(float konacnaOcjena)
+    {
+        _konacnaOcjena = konacnaOcjena;
+    }
+
+    void DodajPoglavlje(const char *naziv, const char *sadrzaj)
+    {
+        if (_poglavljaRada.size() == 0)
+        {
+            _poglavljaRada.push_back(Poglavlje(naziv, sadrzaj));
+            return;
+        }
+
+        for (int i = 0; i < _poglavljaRada.size(); i++)
+        {
+            if (strcmp(_poglavljaRada[i].GetNaslov(), naziv) == 0)
+            {
+                _poglavljaRada[i].SetSadrzaj(sadrzaj);
+            }
+            else
+            {
+                _poglavljaRada.push_back(Poglavlje(naziv, sadrzaj));
+                return;
+            }
+        }
+    }
+
+    void OcijeniPoglavlje(const char *naziv, int ocjena)
+    {
+        bool flagged = false;
+
+        for (int i = 0; i < _poglavljaRada.size(); i++)
+        {
+            if (strcmp(_poglavljaRada[i].GetNaslov(), naziv) == 0)
+            {
+                _poglavljaRada[i].SetOcjena(ocjena);
+
+                if (ocjena > 6 && ocjena < 10)
+                {
+                    _poglavljaRada[i].SetPrihvaceno(true);
+                    return;
+                }
+                else
+                {
+                    throw std::runtime_error("Ocjena nije pozitivna!");
+                }
+            }
+            else
+            {
+                flagged = true;
+            }
+        }
+
+        if (flagged)
+        {
+            throw std::runtime_error("Poglavlje nepostojece!");
+        }
+    }
 
     friend ostream &operator<<(ostream &COUT, ZavrsniRad &obj)
     {
@@ -285,6 +375,43 @@ public:
         return COUT;
     }
 };
+
+bool operator==(const ZavrsniRad &obj1, const ZavrsniRad &obj2)
+{
+    bool temp = true;
+
+    if (strcmp(obj1.GetNazivTeme(), obj2.GetNazivTeme()) != 0)
+    {
+        temp = false;
+    }
+    if (obj1.GetDatumOdbrane() != obj2.GetDatumOdbrane())
+    {
+        temp = false;
+    }
+    if (obj1.GetOcjena() != obj2.GetOcjena())
+    {
+        temp = false;
+    }
+    if (const_cast<ZavrsniRad &>(obj1).GetPoglavlja().size() != const_cast<ZavrsniRad &>(obj2).GetPoglavlja().size())
+    {
+        temp = false;
+    }
+
+    for (int i = 0; i < const_cast<ZavrsniRad &>(obj1).GetPoglavlja().size(); i++)
+    {
+        if (const_cast<ZavrsniRad &>(obj1).GetPoglavlja()[i] != const_cast<ZavrsniRad &>(obj2).GetPoglavlja()[i])
+        {
+            temp = false;
+        }
+    }
+
+    return temp;
+}
+
+bool operator!=(const ZavrsniRad &obj1, const ZavrsniRad &obj2)
+{
+    return !(obj1 == obj2);
+}
 
 class Osoba
 {
